@@ -1,7 +1,6 @@
 package hercules.config.notification
 
 import com.typesafe.config.Config
-import java.util.List
 import scala.collection.JavaConversions._
 import hercules.protocols.NotificationChannelProtocol._
 
@@ -19,7 +18,7 @@ object EmailNotificationConfig {
     val emailChannels = asScalaBuffer(
       conf.getStringList("channels")
       ).toSeq.map(
-        stringToChannel)
+        NotificationConfig.stringToChannel)
     val emailNumRetries = conf.getInt("num_retries")
     val emailRetryInterval = conf.getInt("retry_interval")
     new EmailNotificationConfig(
@@ -34,13 +33,6 @@ object EmailNotificationConfig {
     )
   }
   
-  def stringToChannel(str:String): NotificationChannel = str match {
-    case "progress" => Progress
-    case "info" => Info
-    case "warning" => Warning
-    case "critical" => Critical
-  }
-
 }
 
 /**
