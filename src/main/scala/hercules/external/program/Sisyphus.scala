@@ -1,9 +1,12 @@
 package hercules.external.program
 
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FileWriter
-import java.io.PrintWriter
+import java.io.{
+  BufferedWriter,
+  File,
+  FileFilter,
+  FileWriter,
+  PrintWriter
+}
 import java.util.Date
 
 import scala.sys.process.ProcessLogger
@@ -12,8 +15,9 @@ import scala.concurrent._
 import scala.io.Source
 
 import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.WildcardFilter
 
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{ Config, ConfigFactory }
 
 import hercules.demultiplexing.Demultiplexer
 import hercules.demultiplexing.DemultiplexingResult
@@ -26,12 +30,40 @@ import hercules.entities.illumina.MiSeqProcessingUnit
 import hercules.exceptions.HerculesExceptions
 
 /**
+ * Companion object to the Sisyphus class
+ */
+object Sisyphus {
+
+  val runFolderPaths: Seq[String] = Seq(
+    "Sisyphus",
+    "MD5",
+    "sisyphus.sh",
+    "excludedTiles.yml",
+    "Unaligned",
+    "Excluded",
+    "quickReport.xml",
+    "setupBclToFastq.err"
+  )
+  val runFolderGlobs: Seq[String] = Seq(
+    "rsync*.log"
+  )
+  val fileFilter: FileFilter =
+    new WildcardFilter(
+      (runFolderPaths ++ runFolderGlobs).map(s => "*" + s).toArray)
+
+  def filesAndDirsToDelete(implicit runfolder: File): Seq[File] = {
+    new File("/data/scratch/" + runfolder.getName) +:
+      runfolder.listFiles(fileFilter)
+  }
+
+}
+
+/**
  * Used for interacting with Sisyphus (the Molmed demultiplexing and project
  * handling engine).
  */
-class Sisyphus() extends Demultiplexer with ExternalProgram {
+class Sisyphus(val config: Config = ConfigFactory.load()) extends Demultiplexer with ExternalProgram {
 
-  val config = ConfigFactory.load()
   val sisyphusInstallLocation = config.getString("general.sisyphusInstallLocation")
   val sisyphusLogLocation = config.getString("general.sisyphusLogLocation")
 
@@ -119,22 +151,9 @@ class Sisyphus() extends Demultiplexer with ExternalProgram {
    */
   def cleanup(unit: ProcessingUnit): Unit = {
 
-    val runfolder = new File(unit.uri)
-    val runfolderName = runfolder.getName()
+    implicit val runfolder = new File(unit.uri)
 
-    val filesAndDirsToDelete = Seq(
-      "Sisyphus",
-      "MD5",
-      "rsync*.log",
-      "sisyphus.sh",
-      "excludedTiles.yml",
-      "/data/scratch/" + runfolderName,
-      "Unaligned",
-      "Excluded",
-      "quickReport.xml",
-      "setupBclToFastq.err")
-
-    filesAndDirsToDelete.map(x => new File(runfolder + "/" + x)).foreach(x => {
+    Sisyphus.filesAndDirsToDelete.foreach(x => {
       if (x.exists())
         if (x.isDirectory())
           FileUtils.deleteQuietly(x)
