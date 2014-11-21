@@ -3,7 +3,7 @@ package hercules.entities.illumina
 import org.scalatest.FlatSpec
 import org.scalatest.Matchers
 import java.io.File
-import akka.event.Logging
+import akka.event.{ Logging, LoggingAdapter }
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils
@@ -17,11 +17,7 @@ import hercules.config.processingunit.IlluminaProcessingUnitFetcherConfig
 import hercules.config.processingunit.IlluminaProcessingUnitConfig
 import hercules.config.processingunit.IlluminaProcessingUnitConfig
 
-class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with BeforeAndAfterEach {
-
-  val system = ActorSystem("testsystem",
-    ConfigFactory.parseString("""akka.loggers = ["akka.testkit.TestEventListener"]"""))
-  val log = system.log
+object IlluminaProcessingUnitFetcherTest {
 
   val runfolderRoots = List(new File("test_runfolders"))
   val sampleSheetRoot = new File("test_samplesheets")
@@ -32,7 +28,7 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
   val customProgramConfigRoot = new File("test_custom_program_configs")
   val defaultProgramConfigFile = new File("default_program_config")
 
-  val fetcherConfig = new IlluminaProcessingUnitFetcherConfig(
+  def fetcherConfig(implicit log: LoggingAdapter) = new IlluminaProcessingUnitFetcherConfig(
     runfolderRoots,
     sampleSheetRoot,
     customQCConfigRoot,
@@ -57,6 +53,22 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
     "140924_M00485_0159_000000000-AA5R1").
     map(x => new File(runfolderRoots(0) + "/" + x))
 
+  def createRunFolders(takeXFirst: Int = 2): Seq[File] = {
+
+    defaultQCConfigFile.createNewFile()
+    defaultProgramConfigFile.createNewFile()
+
+    val created = runfolders.take(takeXFirst).map(x => {
+      x.mkdirs()
+      (new File(sampleSheetRoot + "/" + x.getName() + "_samplesheet.csv")).createNewFile()
+      (new File(x + "/RTAComplete.txt")).createNewFile()
+      createMinimalRunParametersXml(x)
+      x
+    })
+
+    created
+  }
+
   def createMinimalRunParametersXml(runfolder: File) = {
     val runParameters = new File(runfolder + "/runParameters.xml")
     val runParametersWithEmptyManifest = new File(runfolder + "/runParameters.miseq.empty.xml")
@@ -73,28 +85,28 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
           <ManifestFiles />
           <Setup>
-        		<ApplicationName>$controlSoftwareType</ApplicationName>
-      	  </Setup>
+                <ApplicationName>$controlSoftwareType</ApplicationName>
+          </Setup>
         </RunParameters>      
         """
       case "140924_M00485_0159_000000000-AA5R1" => s"""<?xml version="1.0"?>
         <RunParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
           <ManifestFiles>
-      		<string>TruSeq_CAT_Manifest_TC0036120-CAT</string>
-      		<string>TruSeq_Custom_Amplicon_Control_Manifest_ACP1.txt</string>
+            <string>TruSeq_CAT_Manifest_TC0036120-CAT</string>
+            <string>TruSeq_Custom_Amplicon_Control_Manifest_ACP1.txt</string>
           </ManifestFiles>
           <Setup>
-      		<ApplicationName>$controlSoftwareType</ApplicationName>
-    	  </Setup>
+            <ApplicationName>$controlSoftwareType</ApplicationName>
+          </Setup>
         </RunParameters>      
         """
       case _ => s"""<?xml version="1.0"?>
-      	<RunParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+        <RunParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
           <Setup>
-      		<ApplicationName>$controlSoftwareType</ApplicationName>
-    	  </Setup>
+            <ApplicationName>$controlSoftwareType</ApplicationName>
+          </Setup>
         </RunParameters>      
         """
     }
@@ -103,22 +115,6 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
     printwriter.print(xmlString)
     printwriter.close()
 
-  }
-
-  def createRunFolders(takeXFirst: Int = 2): Seq[File] = {
-
-    defaultQCConfigFile.createNewFile()
-    defaultProgramConfigFile.createNewFile()
-
-    val created = runfolders.take(takeXFirst).map(x => {
-      x.mkdirs()
-      (new File(sampleSheetRoot + "/" + x.getName() + "_samplesheet.csv")).createNewFile()
-      (new File(x + "/RTAComplete.txt")).createNewFile()
-      createMinimalRunParametersXml(x)
-      x
-    })
-
-    created
   }
 
   def generateExpectedRunfolders(runfolders: Seq[File], takeXFirst: Int): Seq[IlluminaProcessingUnit] = {
@@ -142,18 +138,29 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
     runfolders.map(x => FileUtils.deleteDirectory(x))
   }
 
+}
+
+class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with BeforeAndAfterEach {
+
+  val system = ActorSystem("testsystem",
+    ConfigFactory.parseString("""akka.loggers = ["akka.testkit.TestEventListener"]"""))
+  implicit val log: LoggingAdapter = system.log
+
   override def beforeEach() = {
-    listOfDirsThatNeedSetupAndTeardown.map(x => x.mkdirs())
-    createRunFolders()
+    IlluminaProcessingUnitFetcherTest.listOfDirsThatNeedSetupAndTeardown.map(x => x.mkdirs())
+    IlluminaProcessingUnitFetcherTest.createRunFolders()
   }
 
   override def afterEach() = {
-    listOfDirsThatNeedSetupAndTeardown.map(x => FileUtils.deleteDirectory(x))
-    tearDownRunfolders()
+    IlluminaProcessingUnitFetcherTest.listOfDirsThatNeedSetupAndTeardown.map(x => FileUtils.deleteDirectory(x))
+    IlluminaProcessingUnitFetcherTest.tearDownRunfolders()
   }
 
+  val runfolders = IlluminaProcessingUnitFetcherTest.runfolders
+  val fetcherConfig = IlluminaProcessingUnitFetcherTest.fetcherConfig
+
   "A IlluminaProcessingUnitFetcher" should "be able to find new runfolders" in {
-    val expected: Seq[IlluminaProcessingUnit] = generateExpectedRunfolders(runfolders, 2)
+    val expected: Seq[IlluminaProcessingUnit] = IlluminaProcessingUnitFetcherTest.generateExpectedRunfolders(runfolders, 2)
 
     val fetcher = new IlluminaProcessingUnitFetcher()
     val actual = fetcher.checkForReadyProcessingUnits(fetcherConfig)
@@ -170,7 +177,7 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
 
   it should " skip runfolder which have already been found" in {
 
-    val firstCreateTwoRunfolders: Seq[IlluminaProcessingUnit] = generateExpectedRunfolders(runfolders, 2)
+    val firstCreateTwoRunfolders: Seq[IlluminaProcessingUnit] = IlluminaProcessingUnitFetcherTest.generateExpectedRunfolders(runfolders, 2)
 
     val pathToFoundFolder = new File(firstCreateTwoRunfolders(1).uri)
     val foundFile = new File(pathToFoundFolder + "/found")
@@ -187,7 +194,7 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
 
   it should " disregard runfolders which have already be found" in {
 
-    val expected: Seq[IlluminaProcessingUnit] = generateExpectedRunfolders(runfolders, 1)
+    val expected: Seq[IlluminaProcessingUnit] = IlluminaProcessingUnitFetcherTest.generateExpectedRunfolders(runfolders, 1)
 
     // Add a found file to the second runfolder
     // which means that only the first runfolder should be found
@@ -201,8 +208,8 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
 
   it should " return a MiSeqProcessingUnit for MiSeq runs" in {
 
-    createRunFolders(4)
-    val expected: Seq[IlluminaProcessingUnit] = generateExpectedRunfolders(runfolders, 4)
+    IlluminaProcessingUnitFetcherTest.createRunFolders(4)
+    val expected: Seq[IlluminaProcessingUnit] = IlluminaProcessingUnitFetcherTest.generateExpectedRunfolders(runfolders, 4)
 
     val fetcher = new IlluminaProcessingUnitFetcher()
     val actual = fetcher.checkForReadyProcessingUnits(fetcherConfig)
@@ -217,7 +224,7 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
   }
 
   it should " be able to parse runParameters.xml for ManifestFiles files" in {
-    createRunFolders(6)
+    IlluminaProcessingUnitFetcherTest.createRunFolders(6)
     val fetcher = new IlluminaProcessingUnitFetcher()
     val actual: Seq[IlluminaProcessingUnit] = fetcher.checkForReadyProcessingUnits(fetcherConfig)
 
@@ -241,7 +248,7 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
 
   it should " return a HiSeqProcessingUnit for HiSeq runs" in {
 
-    val expected: Seq[IlluminaProcessingUnit] = generateExpectedRunfolders(runfolders, 1)
+    val expected: Seq[IlluminaProcessingUnit] = IlluminaProcessingUnitFetcherTest.generateExpectedRunfolders(runfolders, 1)
 
     val fetcher = new IlluminaProcessingUnitFetcher()
     val actual = fetcher.checkForReadyProcessingUnits(fetcherConfig)
@@ -257,18 +264,18 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
 
   it should " load the custom config files if custom ones are available" in {
 
-    tearDownRunfolders()
-    val created = createRunFolders(1)
+    IlluminaProcessingUnitFetcherTest.tearDownRunfolders()
+    val created = IlluminaProcessingUnitFetcherTest.createRunFolders(1)
 
     // Create custom config files
-    val createdRunfolder: Seq[IlluminaProcessingUnit] = generateExpectedRunfolders(created, 1)
+    val createdRunfolder: Seq[IlluminaProcessingUnit] = IlluminaProcessingUnitFetcherTest.generateExpectedRunfolders(created, 1)
 
     val expected = createdRunfolder.map(x => {
 
       val runfolderName = new File(x.uri).getName()
-      val sisyphusFile = new File(customProgramConfigRoot + "/" + runfolderName + "_sisyphus.yml")
+      val sisyphusFile = new File(IlluminaProcessingUnitFetcherTest.customProgramConfigRoot + "/" + runfolderName + "_sisyphus.yml")
       sisyphusFile.createNewFile()
-      val qcFile = new File(customQCConfigRoot + "/" + runfolderName + "_qc.xml")
+      val qcFile = new File(IlluminaProcessingUnitFetcherTest.customQCConfigRoot + "/" + runfolderName + "_qc.xml")
       qcFile.createNewFile()
 
       val newConfig = x.processingUnitConfig.copy(QCConfig = qcFile, programConfig = Some(sisyphusFile))
@@ -285,7 +292,7 @@ class IlluminaProcessingUnitFetcherTest extends FlatSpec with Matchers with Befo
   it should " throw a FileNotFoundException exception if there is no RunParameters.xml file available in the runfolder" in {
 
     // remove all the RunParameters.xml
-    for (runfolder <- runfolderRoots) {
+    for (runfolder <- IlluminaProcessingUnitFetcherTest.runfolderRoots) {
       runfolder.listFiles().flatMap(x => x.listFiles()).
         find(p => p.getName() == "runParameters.xml").
         foreach(f => f.delete())
