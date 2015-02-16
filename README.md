@@ -44,6 +44,8 @@ To understand how Hercules works it's important to grasp a few key concepts.
 **Roles:** Each node can run one or more roles. Examples of roles are: Master and demultiplexer. Each roles contains one part of the workflow functionallity. The roles communicate with each other through sending messages, and this is independent of whether the roles are running on the same node or not.
 **Master:** The actor which acts as the centralizing point in the workflow. Messages from other roles will pass through the master, which will decide what to do with them. 
 
+![Hercules overview](http://molmed.github.io/Hercules_overview.jpg)
+
 Defining nodes and roles makes Hercules very flexible in how it is able to run. It's possible to run Hercules with all required roles on a single node, or to split the roles out over serveral nodes. The later is useful as it allows you run some long runing and resoruce intensive operations (such as the demultiplexing) on separate nodes.
 
 It also makes Hercules highly resilient to errors. An error in one part of the system should not propagate and disturb other parts of the system. Nodes can be taken down and up again, and they will then re-attach themselves to the cluster. Futhermore the mater actor has a persistance mechanism which makes sure that data will not be lost.
